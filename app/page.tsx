@@ -145,7 +145,7 @@ export default function HomePage() {
       <section className="topbar">
         <div>
           <p className="kicker">Inventory / Batching</p>
-          <h1>Batch Planner</h1>
+          <h1>Enter amounts in ml</h1>
         </div>
 
         <div className="topbar-actions">
