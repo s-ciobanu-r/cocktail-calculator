@@ -1,4 +1,3 @@
-cat > app/page.tsx <<'EOF'
 "use client";
 
 import { useMemo, useState } from "react";
@@ -131,7 +130,7 @@ export default function HomePage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "cocktail-totals.csv";
+    link.download = "cocktail-inventory.csv";
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -146,29 +145,29 @@ export default function HomePage() {
       <div className="ambient ambient-right" />
 
       <section className="hero">
-        <div className="hero-badge">Vintage Bar Console · Modern Batch Studio</div>
+        <div className="hero-badge">Vintage Inventory Console · Modern Batch Planner</div>
 
         <div className="hero-grid">
           <div>
-            <p className="eyebrow">Cocktail Calculator</p>
-            <h1>Vintage soul. Modern precision.</h1>
+            <p className="eyebrow">Inventory & Batching</p>
+            <h1>Vintage soul. Modern control.</h1>
             <p className="hero-copy">
-              A polished batching dashboard for service nights, event prep, and
-              back-bar planning. Enter bottle targets in ml, then generate a
-              clean ingredient breakdown instantly.
+              A premium batching and inventory dashboard for service nights, prep runs,
+              and event planning. Enter the target ml per cocktail and generate a clean
+              ingredient breakdown instantly.
             </p>
 
             <div className="hero-stats">
               <div className="stat-card">
-                <span className="stat-label">Cocktails loaded</span>
+                <span className="stat-label">Recipes loaded</span>
                 <strong>{cocktails.length}</strong>
               </div>
               <div className="stat-card">
-                <span className="stat-label">Active entries</span>
+                <span className="stat-label">Active selections</span>
                 <strong>{activeCount}</strong>
               </div>
               <div className="stat-card">
-                <span className="stat-label">Batch total</span>
+                <span className="stat-label">Planned volume</span>
                 <strong>{totalBatchMl.toFixed(0)} ml</strong>
               </div>
             </div>
@@ -177,14 +176,14 @@ export default function HomePage() {
           <aside className="hero-panel">
             <div className="hero-panel-inner">
               <p className="panel-kicker">House note</p>
-              <h2>Designed like a menu from a grand hotel bar.</h2>
+              <h2>Built like a luxury bar ledger.</h2>
               <p>
-                Deep ink, brass accents, soft paper tones, and clean modern spacing.
-                The result feels premium without getting fussy.
+                Deep ink tones, brass accents, soft paper warmth, and sharp modern spacing.
+                It feels like a classic hotel cocktail book redesigned for operations.
               </p>
               <div className="panel-rule" />
               <p className="panel-small">
-                Tip: enter only the cocktails you’re batching tonight. Blank fields are ignored.
+                Enter only the drinks you’re batching or stocking today. Blank fields are ignored.
               </p>
             </div>
           </aside>
@@ -194,8 +193,8 @@ export default function HomePage() {
       <section className="form-wrap">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Input</p>
-            <h2>Build your batch sheet</h2>
+            <p className="eyebrow">Planner</p>
+            <h2>Build your prep sheet</h2>
           </div>
           <div className="heading-actions">
             <button type="button" className="ghost-button" onClick={resetAll}>
@@ -240,10 +239,10 @@ export default function HomePage() {
 
           <div className="submit-row">
             <button type="submit" className="primary-button" disabled={loading}>
-              {loading ? "Calculating..." : "Generate ingredient totals"}
+              {loading ? "Calculating..." : "Generate inventory totals"}
             </button>
             <p className="submit-note">
-              Built for fast service planning, not spreadsheet suffering.
+              Fast enough for service prep. Clean enough for production planning.
             </p>
           </div>
 
@@ -256,7 +255,7 @@ export default function HomePage() {
           <div className="section-heading">
             <div>
               <p className="eyebrow">Output</p>
-              <h2>Ingredient totals</h2>
+              <h2>Inventory totals</h2>
             </div>
             <div className="heading-actions">
               <button type="button" className="ghost-button" onClick={downloadCsv}>
@@ -312,4 +311,3 @@ export default function HomePage() {
     </main>
   );
 }
-EOF
