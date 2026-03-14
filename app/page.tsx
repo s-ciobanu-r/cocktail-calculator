@@ -1,51 +1,88 @@
+cat > app/page.tsx <<'EOF'
 "use client";
 
-import { jsPDF } from "jspdf";
 import { useMemo, useState } from "react";
-import { cocktailNames } from "@/lib/cocktails";
 
-type TotalsMap = Record<string, number>;
-type GroupedMap = Record<string, TotalsMap>;
+type Totals = Record<string, number>;
+type Grouped = Record<string, Record<string, number>>;
 
-type ApiResponse = {
-  totals: TotalsMap;
-  grouped: GroupedMap;
+const cocktails = [
+  "Negroni",
+  "Boulevardier",
+  "Melon Blossom",
+  "Pornstar Martini",
+  "Espresso Martini",
+  "Cosmopolitan",
+  "Venus Spritz",
+  "Old Fashioned",
+  "Whiskey Sour",
+  "Botanica",
+  "Aperol Oro Spritz",
+  "Turqoise",
+  "Que Bola",
+];
+
+const featuredCopy: Record<string, string> = {
+  Negroni: "Bitter, polished, timeless.",
+  Boulevardier: "Silky, warm, late-night energy.",
+  "Melon Blossom": "Bright, playful, floral.",
+  "Pornstar Martini": "Loud, glossy, celebratory.",
+  "Espresso Martini": "Dark roast, velvet finish.",
+  Cosmopolitan: "Crisp, sharp, iconic.",
+  "Venus Spritz": "Soft fruit with botanical lift.",
+  "Old Fashioned": "Classic amber authority.",
+  "Whiskey Sour": "Balanced, bright, structured.",
+  Botanica: "Zero-proof, garden-club elegance.",
+  "Aperol Oro Spritz": "Golden hour in a glass.",
+  Turqoise: "Tropical neon, clean finish.",
+  "Que Bola": "Juicy, rich, party-ready.",
 };
 
-const currencyFreeNumber = (value: number) => `${value.toFixed(1)} ml`;
+function formatMl(value: number) {
+  return `${value.toFixed(1)} ml`;
+}
+
+function slugify(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+}
 
 export default function HomePage() {
-  const [values, setValues] = useState<Record<string, string>>(
-    Object.fromEntries(cocktailNames.map((name) => [name, ""])),
+  const [amounts, setAmounts] = useState<Record<string, string>>(
+    Object.fromEntries(cocktails.map((name) => [name, ""]))
   );
-  const [result, setResult] = useState<ApiResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState<{ totals: Totals; grouped: Grouped } | null>(null);
 
-  const hasResults = !!result && Object.keys(result.totals).length > 0;
-
-  const sortedTotals = useMemo(
-    () => Object.entries(result?.totals ?? {}).sort((a, b) => a[0].localeCompare(b[0])),
-    [result],
+  const enteredCocktails = useMemo(
+    () =>
+      Object.entries(amounts)
+        .filter(([, value]) => Number(value) > 0)
+        .map(([name, value]) => ({ name, amount: Number(value) })),
+    [amounts]
   );
 
-  const sortedGrouped = useMemo(() => {
-    return Object.entries(result?.grouped ?? {})
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([category, ingredients]) => [
-        category,
-        Object.entries(ingredients).sort((a, b) => a[0].localeCompare(b[0])),
-      ] as const);
+  const totalBatchMl = enteredCocktails.reduce((sum, item) => sum + item.amount, 0);
+  const activeCount = enteredCocktails.length;
+
+  const sortedTotals = useMemo(() => {
+    if (!result) return [];
+    return Object.entries(result.totals).sort((a, b) => b[1] - a[1]);
   }, [result]);
 
-  const handleChange = (name: string, value: string) => {
-    setValues((current) => ({ ...current, [name]: value }));
-  };
+  const groupedEntries = useMemo(() => {
+    if (!result) return [];
+    return Object.entries(result.grouped).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [result]);
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setIsLoading(true);
-    setError(null);
+    setLoading(true);
+    setError("");
+
+    const payload = Object.fromEntries(
+      Object.entries(amounts).filter(([, value]) => Number(value) > 0)
+    );
 
     try {
       const response = await fetch("/api/cocktailbatches", {
@@ -53,294 +90,226 @@ export default function HomePage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(values),
+        body: JSON.stringify(payload),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error("Failed to calculate cocktail totals.");
+        throw new Error(data?.error || "Something went wrong.");
       }
 
-      const data: ApiResponse = await response.json();
       setResult(data);
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Something went wrong.");
-      setResult(null);
+      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unexpected error.");
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  };
+  }
 
-  const downloadCsv = () => {
+  function resetAll() {
+    setAmounts(Object.fromEntries(cocktails.map((name) => [name, ""])));
+    setResult(null);
+    setError("");
+  }
+
+  function downloadCsv() {
     if (!result) return;
 
-    const lines = ["Ingredient,Amount (ml)"];
-    for (const [ingredient, amount] of sortedTotals) {
-      lines.push(`"${ingredient.replaceAll('"', '""')}",${amount.toFixed(1)}`);
-    }
+    const rows = [["Ingredient", "Amount (ml)"]].concat(
+      Object.entries(result.totals)
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([ingredient, amount]) => [ingredient, amount.toFixed(1)])
+    );
 
-    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const csv = rows
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "cocktail_totals.csv";
-    document.body.appendChild(link);
+    link.download = "cocktail-totals.csv";
     link.click();
-    link.remove();
     URL.revokeObjectURL(url);
-  };
+  }
 
-  const downloadPdf = () => {
-    if (!result) return;
-
-    const doc = new jsPDF();
-    let y = 20;
-
-    doc.setFontSize(18);
-    doc.text("Cocktail Ingredient Totals", 14, y);
-    y += 12;
-
-    doc.setFontSize(11);
-    for (const [ingredient, amount] of sortedTotals) {
-      if (y > 280) {
-        doc.addPage();
-        y = 20;
-      }
-      doc.text(`${ingredient}: ${amount.toFixed(1)} ml`, 14, y);
-      y += 8;
-    }
-
-    doc.save("cocktail_totals.pdf");
-  };
+  function printPdf() {
+    window.print();
+  }
 
   return (
-    <main style={{ minHeight: "100vh", padding: "32px 16px" }}>
-      <div
-        style={{
-          maxWidth: 1080,
-          margin: "0 auto",
-          display: "grid",
-          gap: 24,
-        }}
-      >
-        <section
-          style={{
-            background: "#2c3e50",
-            color: "#fff",
-            borderRadius: 16,
-            padding: 24,
-            boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
-          }}
-        >
-          <h1 style={{ margin: 0, fontSize: 32 }}>🍸 Cocktail Batch Calculator</h1>
-          <p style={{ margin: "10px 0 0", opacity: 0.9 }}>
-            Enter the batch size for each cocktail and get ingredient totals instantly.
-          </p>
-        </section>
+    <main className="page-shell">
+      <div className="ambient ambient-left" />
+      <div className="ambient ambient-right" />
 
-        <section
-          style={{
-            background: "#fff",
-            borderRadius: 16,
-            padding: 24,
-            boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
-          }}
-        >
-          <form onSubmit={handleSubmit}>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-                gap: 14,
-              }}
-            >
-              {cocktailNames.map((name) => (
-                <label
-                  key={name}
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 8,
-                    padding: 14,
-                    background: "#f8fafc",
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 12,
-                  }}
-                >
-                  <span style={{ fontWeight: 700 }}>{name}</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={values[name]}
-                    onChange={(event) => handleChange(name, event.target.value)}
-                    placeholder="Amount in ml"
-                    style={{
-                      padding: "10px 12px",
-                      borderRadius: 10,
-                      border: "1px solid #cbd5e1",
-                      background: "#fff",
-                    }}
-                  />
-                </label>
+      <section className="hero">
+        <div className="hero-badge">Vintage Bar Console · Modern Batch Studio</div>
+
+        <div className="hero-grid">
+          <div>
+            <p className="eyebrow">Cocktail Calculator</p>
+            <h1>Vintage soul. Modern precision.</h1>
+            <p className="hero-copy">
+              A polished batching dashboard for service nights, event prep, and
+              back-bar planning. Enter bottle targets in ml, then generate a
+              clean ingredient breakdown instantly.
+            </p>
+
+            <div className="hero-stats">
+              <div className="stat-card">
+                <span className="stat-label">Cocktails loaded</span>
+                <strong>{cocktails.length}</strong>
+              </div>
+              <div className="stat-card">
+                <span className="stat-label">Active entries</span>
+                <strong>{activeCount}</strong>
+              </div>
+              <div className="stat-card">
+                <span className="stat-label">Batch total</span>
+                <strong>{totalBatchMl.toFixed(0)} ml</strong>
+              </div>
+            </div>
+          </div>
+
+          <aside className="hero-panel">
+            <div className="hero-panel-inner">
+              <p className="panel-kicker">House note</p>
+              <h2>Designed like a menu from a grand hotel bar.</h2>
+              <p>
+                Deep ink, brass accents, soft paper tones, and clean modern spacing.
+                The result feels premium without getting fussy.
+              </p>
+              <div className="panel-rule" />
+              <p className="panel-small">
+                Tip: enter only the cocktails you’re batching tonight. Blank fields are ignored.
+              </p>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section className="form-wrap">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Input</p>
+            <h2>Build your batch sheet</h2>
+          </div>
+          <div className="heading-actions">
+            <button type="button" className="ghost-button" onClick={resetAll}>
+              Reset
+            </button>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="cocktail-grid">
+            {cocktails.map((name, index) => (
+              <label key={name} className="cocktail-card">
+                <div className="cocktail-card-top">
+                  <span className="card-index">{String(index + 1).padStart(2, "0")}</span>
+                  <span className="card-chip">{slugify(name)}</span>
+                </div>
+
+                <div className="cocktail-title-row">
+                  <h3>{name}</h3>
+                  <span className="unit-pill">ml</span>
+                </div>
+
+                <p className="cocktail-copy">{featuredCopy[name]}</p>
+
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  inputMode="numeric"
+                  placeholder="0"
+                  value={amounts[name]}
+                  onChange={(e) =>
+                    setAmounts((current) => ({
+                      ...current,
+                      [name]: e.target.value,
+                    }))
+                  }
+                />
+              </label>
+            ))}
+          </div>
+
+          <div className="submit-row">
+            <button type="submit" className="primary-button" disabled={loading}>
+              {loading ? "Calculating..." : "Generate ingredient totals"}
+            </button>
+            <p className="submit-note">
+              Built for fast service planning, not spreadsheet suffering.
+            </p>
+          </div>
+
+          {error ? <div className="error-box">{error}</div> : null}
+        </form>
+      </section>
+
+      {result ? (
+        <section className="results-wrap">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Output</p>
+              <h2>Ingredient totals</h2>
+            </div>
+            <div className="heading-actions">
+              <button type="button" className="ghost-button" onClick={downloadCsv}>
+                Download CSV
+              </button>
+              <button type="button" className="primary-button compact" onClick={printPdf}>
+                Save / Print PDF
+              </button>
+            </div>
+          </div>
+
+          <div className="results-grid">
+            <div className="results-card">
+              <div className="results-card-header">
+                <h3>All ingredients</h3>
+                <span>{sortedTotals.length} items</span>
+              </div>
+
+              <div className="results-table">
+                {sortedTotals.map(([ingredient, amount]) => (
+                  <div className="results-row" key={ingredient}>
+                    <span>{ingredient}</span>
+                    <strong>{formatMl(amount)}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="results-side">
+              {groupedEntries.map(([category, items]) => (
+                <div className="category-card" key={category}>
+                  <div className="results-card-header">
+                    <h3>{category}</h3>
+                    <span>{Object.keys(items).length} items</span>
+                  </div>
+
+                  <div className="results-table tight">
+                    {Object.entries(items)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([ingredient, amount]) => (
+                        <div className="results-row" key={ingredient}>
+                          <span>{ingredient}</span>
+                          <strong>{formatMl(amount)}</strong>
+                        </div>
+                      ))}
+                  </div>
+                </div>
               ))}
             </div>
-
-            <div style={{ display: "flex", gap: 12, marginTop: 20, flexWrap: "wrap" }}>
-              <button
-                type="submit"
-                disabled={isLoading}
-                style={{
-                  padding: "12px 18px",
-                  borderRadius: 12,
-                  border: "none",
-                  background: "#3498db",
-                  color: "#fff",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                }}
-              >
-                {isLoading ? "Calculating..." : "Submit Batches"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setValues(Object.fromEntries(cocktailNames.map((name) => [name, ""])));
-                  setResult(null);
-                  setError(null);
-                }}
-                style={{
-                  padding: "12px 18px",
-                  borderRadius: 12,
-                  border: "1px solid #cbd5e1",
-                  background: "#fff",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                }}
-              >
-                Reset
-              </button>
-            </div>
-          </form>
+          </div>
         </section>
-
-        {error ? (
-          <section
-            style={{
-              background: "#fff1f2",
-              border: "1px solid #fecdd3",
-              color: "#9f1239",
-              borderRadius: 16,
-              padding: 18,
-            }}
-          >
-            {error}
-          </section>
-        ) : null}
-
-        {result ? (
-          <section
-            style={{
-              background: "#fff",
-              borderRadius: 16,
-              padding: 24,
-              boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-              <div>
-                <h2 style={{ marginTop: 0 }}>Results</h2>
-                <p style={{ marginTop: 0, color: "#475569" }}>
-                  Totals are scaled from the original 750 ml recipe base.
-                </p>
-              </div>
-              {hasResults ? (
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <button
-                    type="button"
-                    onClick={downloadCsv}
-                    style={{
-                      padding: "10px 14px",
-                      borderRadius: 12,
-                      border: "none",
-                      background: "#0f766e",
-                      color: "#fff",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Download CSV
-                  </button>
-                  <button
-                    type="button"
-                    onClick={downloadPdf}
-                    style={{
-                      padding: "10px 14px",
-                      borderRadius: 12,
-                      border: "none",
-                      background: "#7c3aed",
-                      color: "#fff",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Download PDF
-                  </button>
-                </div>
-              ) : null}
-            </div>
-
-            {hasResults ? (
-              <>
-                <h3>All Ingredients</h3>
-                <DataTable rows={sortedTotals} />
-
-                <h3 style={{ marginTop: 28 }}>Ingredients by Category</h3>
-                <div style={{ display: "grid", gap: 18 }}>
-                  {sortedGrouped.map(([category, ingredients]) => (
-                    <div key={category}>
-                      <h4 style={{ marginBottom: 10 }}>{category}</h4>
-                      <DataTable rows={ingredients} />
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <p style={{ color: "#64748b", marginBottom: 0 }}>
-                No totals yet. Enter one or more batch amounts above.
-              </p>
-            )}
-          </section>
-        ) : null}
-      </div>
+      ) : null}
     </main>
   );
 }
-
-function DataTable({ rows }: { rows: Array<readonly [string, number]> }) {
-  return (
-    <div style={{ overflowX: "auto", border: "1px solid #e5e7eb", borderRadius: 12 }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", background: "#fff" }}>
-        <thead>
-          <tr style={{ background: "#f8fafc" }}>
-            <th style={cellStyle}>Ingredient</th>
-            <th style={cellStyle}>Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(([ingredient, amount]) => (
-            <tr key={ingredient}>
-              <td style={cellStyle}>{ingredient}</td>
-              <td style={cellStyle}>{currencyFreeNumber(amount)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-const cellStyle: React.CSSProperties = {
-  textAlign: "left",
-  padding: "12px 14px",
-  borderBottom: "1px solid #e5e7eb",
-};
+EOF
