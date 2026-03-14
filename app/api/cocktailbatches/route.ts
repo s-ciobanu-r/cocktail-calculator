@@ -8,15 +8,34 @@ export async function POST(request: NextRequest) {
 
   if (contentType.includes("application/json")) {
     body = await request.json();
-  } else if (contentType.includes("application/x-www-form-urlencoded") || contentType.includes("multipart/form-data")) {
+  } else if (
+    contentType.includes("application/x-www-form-urlencoded") ||
+    contentType.includes("multipart/form-data")
+  ) {
     const formData = await request.formData();
-    body = Object.fromEntries(formData.entries());
+    body = Object.fromEntries(
+      Array.from(formData.entries()).map(([key, value]) => [
+        key,
+        typeof value === "string" ? value : value.name,
+      ])
+    ) as Record<string, string>;
   } else {
     return NextResponse.json(
       { error: "Unsupported content type. Use JSON or form submissions." },
-      { status: 415 },
+      { status: 415 }
     );
   }
 
-  return NextResponse.json(calculateTotals(body));
+  try {
+    const result = calculateTotals(body);
+    return NextResponse.json(result);
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error ? error.message : "Unexpected server error",
+      },
+      { status: 500 }
+    );
+  }
 }
